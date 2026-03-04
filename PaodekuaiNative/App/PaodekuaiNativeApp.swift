@@ -59,7 +59,7 @@ struct WelcomeView: View {
                         .foregroundStyle(.white)
                         .shadow(color: .black.opacity(0.4), radius: 5, x: 0, y: 3)
                     
-                    Text("原汁原味 · 畅快联机")
+                    Text("原汁原味 · 经典玩法")
                         .font(.headline)
                         .foregroundStyle(.white.opacity(0.8))
                 }
@@ -69,15 +69,14 @@ struct WelcomeView: View {
                 // Buttons
                 VStack(spacing: 24) {
                     Button(action: {
-                        store.isMultiplayerMode = false
                         withAnimation(.spring()) {
                             store.showWelcomeScreen = false
                         }
                     }) {
                         HStack {
-                            Image(systemName: "person.fill")
+                            Image(systemName: "play.fill")
                                 .font(.title2)
-                            Text("单机模式")
+                            Text("开始游戏")
                                 .font(.title3.bold())
                         }
                         .frame(maxWidth: .infinity)
@@ -92,32 +91,6 @@ struct WelcomeView: View {
                                 .stroke(Color.white.opacity(0.3), lineWidth: 1)
                         )
                         .shadow(color: .blue.opacity(0.4), radius: 10, x: 0, y: 5)
-                    }
-
-                    Button(action: {
-                        store.isMultiplayerMode = true
-                        withAnimation(.spring()) {
-                            store.showWelcomeScreen = false
-                        }
-                    }) {
-                        HStack {
-                            Image(systemName: "person.3.fill")
-                                .font(.title2)
-                            Text("多人联机")
-                                .font(.title3.bold())
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 18)
-                        .background(
-                            LinearGradient(colors: [Color.orange.opacity(0.9), Color.orange.opacity(0.7)], startPoint: .top, endPoint: .bottom)
-                        )
-                        .foregroundColor(.white)
-                        .cornerRadius(20)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.white.opacity(0.3), lineWidth: 1)
-                        )
-                        .shadow(color: .orange.opacity(0.4), radius: 10, x: 0, y: 5)
                     }
                 }
                 .padding(.horizontal, 40)

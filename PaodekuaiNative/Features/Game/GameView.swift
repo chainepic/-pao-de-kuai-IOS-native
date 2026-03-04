@@ -14,7 +14,6 @@ struct GameView: View {
     @State private var dragSelectionMode: DragSelectionMode?
     @State private var touchedCardIDs: Set<String> = []
     @State private var dragSelectingActive = false
-    @State private var playerToKick: RoomPlayer?
     private let handCardWidth: CGFloat = 50
     private let handCardStep: CGFloat = 22
 
@@ -29,7 +28,6 @@ struct GameView: View {
 
             VStack(spacing: 10) {
                 header
-                roomPanel
                 opponents
                 tablePile
                 myHand
@@ -151,202 +149,6 @@ struct GameView: View {
         }
     }
 
-    @ViewBuilder
-    private var roomPanel: some View {
-        if store.isMultiplayerMode {
-            multiplayerRoomPanel
-        }
-    }
-
-    private var multiplayerRoomPanel: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            HStack {
-                Text("房间")
-                    .font(.subheadline)
-                    .bold()
-                    .foregroundStyle(.white)
-                Spacer()
-                if store.inRoom {
-                    Text("房间码 \(store.roomCode)")
-                        .font(.caption)
-                        .foregroundStyle(.white.opacity(0.85))
-                }
-            }
-
-            if !store.inRoom {
-                multiplayerLobbyInputs
-            } else {
-                seatBoard
-                multiplayerRoomActions
-            }
-
-            if !store.errorMessage.isEmpty {
-                Text(store.errorMessage)
-                    .font(.caption)
-                    .foregroundStyle(.red.opacity(0.95))
-            }
-        }
-        .padding(10)
-        .background(Color.black.opacity(0.2))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15), lineWidth: 1))
-        .cornerRadius(10)
-    }
-
-    private var multiplayerLobbyInputs: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 8) {
-                TextField("输入你的昵称", text: $store.nicknameInput)
-                    .textInputAutocapitalization(.never)
-                    .disableAutocorrection(true)
-                    .padding(8)
-                    .background(Color.white.opacity(0.12))
-                    .cornerRadius(8)
-            }
-            HStack(spacing: 8) {
-                TextField("输入房间码", text: $store.roomCodeInput)
-                    .textInputAutocapitalization(.characters)
-                    .disableAutocorrection(true)
-                    .padding(8)
-                    .background(Color.white.opacity(0.12))
-                    .cornerRadius(8)
-                Button("开房") {
-                    Task { await store.createRoom() }
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-                .disabled(store.isLoadingRoom)
-                Button("加入") {
-                    Task { await store.joinRoom() }
-                }
-                .buttonStyle(PrimaryActionButtonStyle())
-                .disabled(store.isLoadingRoom)
-            }
-            if store.isLoadingRoom {
-                ProgressView("连接中...")
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.85))
-            }
-        }
-    }
-
-    private var multiplayerRoomActions: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(spacing: 8) {
-                if store.canOperateRoomSeats {
-                    Button("开始") {
-                        Task { await store.startRoomGame() }
-                    }
-                    .buttonStyle(PrimaryActionButtonStyle())
-                    .disabled(!store.canStartRoomGame)
-                }
-                Button("离开房间") {
-                    Task { await store.leaveRoom() }
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-            }
-            if store.canOperateRoomSeats, !store.canStartRoomGame, let reason = store.startBlockReason {
-                Text("未满足开始条件：\(reason)")
-                    .font(.caption2)
-                    .foregroundStyle(.yellow)
-            }
-        }
-    }
-
-    private var seatBoard: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("座位（0/1/2）")
-                .font(.caption)
-                .foregroundStyle(.white.opacity(0.9))
-            HStack(spacing: 8) {
-                ForEach([0, 1, 2], id: \.self) { seat in
-                    seatCard(for: seat)
-                }
-            }
-        }
-        .alert("提示", isPresented: Binding(
-            get: { playerToKick != nil },
-            set: { if !$0 { playerToKick = nil } }
-        )) {
-            Button("踢出", role: .destructive) {
-                if let p = playerToKick {
-                    Task { await store.kickPlayer(p.id) }
-                }
-                playerToKick = nil
-            }
-            Button("取消", role: .cancel) {
-                playerToKick = nil
-            }
-        } message: {
-            if let p = playerToKick {
-                Text("是否踢出玩家 \(p.nickname)？")
-            }
-        }
-    }
-
-    private func seatCard(for seat: Int) -> some View {
-        VStack(spacing: 6) {
-            Text("Seat \(seat)")
-                .font(.caption2)
-                .foregroundStyle(.white.opacity(0.8))
-            
-            let player = store.roomPlayers.first(where: { $0.seatNo == seat })
-            
-            Text(player?.nickname ?? "空位")
-                .font(.caption)
-                .foregroundStyle(.white)
-                .lineLimit(1)
-                .onTapGesture {
-                    if let p = player,
-                       store.canOperateRoomSeats,
-                       p.id != store.myPlayerID,
-                       !(p.isReady ?? false),
-                       !store.roomHasGameState {
-                        playerToKick = p
-                    }
-                }
-            
-                    if let player = player {
-                        if player.id == store.myPlayerID {
-                            Toggle("", isOn: Binding(
-                                get: { player.isReady ?? false },
-                                set: { newValue in
-                                    if !store.roomHasGameState && !store.isReadySubmitting {
-                                        Task { await store.setReady(newValue) }
-                                    }
-                                }
-                            ))
-                            .labelsHidden()
-                            .toggleStyle(SwitchToggleStyle(tint: .green))
-                            .scaleEffect(0.65)
-                            .frame(width: 44, height: 28)
-                            .contentShape(Rectangle()) // <--- 扩大点击热区
-                            .disabled(store.isReadySubmitting || store.roomHasGameState)
-                        } else {
-                            Text((player.isReady ?? false) ? "已准备" : "未准备")
-                                .font(.caption2)
-                                .foregroundStyle((player.isReady ?? false) ? .green : .yellow)
-                                .frame(height: 20)
-                        }
-                    } else {
-                        Text("-")
-                            .font(.caption2)
-                            .foregroundStyle(.white.opacity(0.5))
-                            .frame(height: 20)
-                    }
-            seatAssignMenu(seatNo: seat)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(8)
-        .background(Color.black.opacity(0.16))
-        .cornerRadius(8)
-    }
-
-    private func seatAssignMenu(seatNo: Int) -> some View {
-        let _ = seatNo
-        return Text("后端暂不支持调座")
-            .font(.caption2)
-            .foregroundStyle(.white.opacity(0.6))
-    }
-
     private var opponents: some View {
         HStack(spacing: 10) {
             opponentBox(title: store.name(.left), cards: store.leftCards.count, active: store.currentTurn == .left)
@@ -462,35 +264,15 @@ struct GameView: View {
                     }
                 }
                 .buttonStyle(PrimaryActionButtonStyle())
-                .disabled(store.isMultiplayerMode && !store.inRoom)
                 
                 Button(L10n.text("pass")) { store.pass() }
                 .buttonStyle(SecondaryActionButtonStyle())
-                .disabled(store.isMultiplayerMode && !store.inRoom)
             }
             HStack(spacing: 8) {
                 Button(L10n.text("new_game")) { showNewGameConfirm = true }
                     .buttonStyle(SecondaryActionButtonStyle())
-                    .disabled(store.isMultiplayerMode && !store.canStartRoomGame)
                 Button(L10n.text("rules")) { showRules = true }
                     .buttonStyle(SecondaryActionButtonStyle())
-            }
-            if store.isMultiplayerMode && store.inRoom && !store.gameFinished {
-                Text("当前出牌：\(store.name(store.currentTurn))")
-                    .font(.footnote.bold())
-                    .foregroundStyle(store.currentTurn == .me ? .green : .orange)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if store.currentTurn == .me {
-                    Text(store.isAutoTrustMode ? "托管中：\(store.turnCountdown)s 后自动操作" : "出牌倒计时：\(store.turnCountdown)s")
-                        .font(.caption)
-                        .foregroundStyle(store.isAutoTrustMode ? .yellow : .white.opacity(0.9))
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                } else if store.isAutoTrustMode {
-                    Text("托管已开启，轮到你时将自动出牌")
-                        .font(.caption)
-                        .foregroundStyle(.yellow)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
             }
         }
     }
