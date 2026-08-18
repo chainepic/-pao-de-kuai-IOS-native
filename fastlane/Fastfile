@@ -1,0 +1,45 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Capture App Store screenshots in Chinese and English"
+  lane :screenshots do
+    root = File.expand_path("..", __dir__)
+    project = File.join(root, "PaodekuaiNative.xcodeproj")
+    scheme = "PaodekuaiNative"
+    bundle_id = "com.paodekuai.pokerjudge"
+    device = ENV.fetch("SCREENSHOT_DEVICE", "iPhone 17 Pro Max")
+    derived_data = File.expand_path("DerivedData", __dir__)
+    app_path = File.join(derived_data, "Build/Products/Debug-iphonesimulator/PaodekuaiNative.app")
+    output_root = File.expand_path("screenshots", __dir__)
+
+    sh("xcodebuild -project '#{project}' -scheme '#{scheme}' -configuration Debug -destination 'platform=iOS Simulator,name=#{device}' -derivedDataPath '#{derived_data}' build")
+    sh("xcrun simctl boot '#{device}' || true")
+    sh("xcrun simctl bootstatus '#{device}' -b")
+    sh("xcrun simctl install '#{device}' '#{app_path}'")
+
+    locales = {
+      "zh-Hans" => "zh-Hans",
+      "en-US" => "en"
+    }
+
+    pages = {
+      "01_welcome" => "welcome",
+      "02_game" => "game",
+      "03_rules" => "rules"
+    }
+
+    locales.each do |locale, app_language|
+      locale_dir = File.join(output_root, locale)
+      sh("mkdir -p '#{locale_dir}'")
+
+      pages.each do |name, page|
+        sh("xcrun simctl terminate '#{device}' '#{bundle_id}' || true")
+        sh("xcrun simctl launch '#{device}' '#{bundle_id}' -screenshot_language '#{app_language}' -screenshot_page '#{page}'")
+        sleep(page == "rules" ? 5 : 3)
+        sh("xcrun simctl io '#{device}' screenshot '#{File.join(locale_dir, "#{name}.png")}'")
+      end
+    end
+
+    UI.success("Screenshots saved to #{output_root}")
+  end
+end

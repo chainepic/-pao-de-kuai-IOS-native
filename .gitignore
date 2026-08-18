@@ -1,0 +1,55 @@
+# Xcode
+## User settings & cache
+xcuserdata/
+*.xcworkspace/xcuserdata/
+*.xcuserdatad/
+*.xcuserstate
+project.xcworkspace/
+.build/
+DerivedData/
+build/
+*.build/
+*.app
+*.dSYM
+*.ipa
+*.pkg
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon?
+._*
+.Spotlight-V100
+.Trashes
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots/**/*.png
+fastlane/test_output
+fastlane/DerivedData/
+
+# Python & AI Evaluation Logs
+__pycache__/
+*.py[cod]
+*$py.class
+*.log
+.pytest_cache/
+batch_*.txt
+*.jsonl
+*.exported.json
+latest-game-log.json
+selfplay-summary.json
+selfplay-detail.json
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*~
+
+# Videos
+*.mp4
+*.mov
+

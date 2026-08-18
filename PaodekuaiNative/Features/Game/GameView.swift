@@ -7,26 +7,21 @@ struct GameView: View {
     }
 
     @EnvironmentObject var store: GameStore
-    @EnvironmentObject var monetization: MonetizationStore
     @AppStorage(AppLanguage.storageKey) private var languageRawValue = AppLanguage.zhHans.rawValue
     @State private var showNewGameConfirm = false
     @State private var showRules = false
     @State private var dragSelectionMode: DragSelectionMode?
     @State private var touchedCardIDs: Set<String> = []
     @State private var dragSelectingActive = false
+    @State private var tableGlow = false
     private let handCardWidth: CGFloat = 50
-    private let handCardStep: CGFloat = 22
+    private let handCardStep: CGFloat = 21
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color(red: 0.06, green: 0.35, blue: 0.22), Color(red: 0.03, green: 0.2, blue: 0.13)],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-            .ignoresSafeArea()
+            GameFeltBackground(glow: tableGlow)
 
-            VStack(spacing: 10) {
+            VStack(spacing: 8) {
                 header
                 opponents
                 tablePile
@@ -35,17 +30,29 @@ struct GameView: View {
                 hint
                 roundHistory
             }
-            .padding(12)
+            .padding(.horizontal, 10)
+            .padding(.top, 4)
+            .padding(.bottom, 8)
+
+            if let effect = store.specialPlayEffect {
+                specialPlayEffectOverlay(effect)
+                    .transition(.scale(scale: 0.65).combined(with: .opacity))
+                    .zIndex(10)
+            }
+        }
+        .animation(.spring(response: 0.28, dampingFraction: 0.62), value: store.specialPlayEffect?.id)
+        .onAppear {
+            tableGlow = true
+            if ProcessInfo.processInfo.arguments.contains("-screenshot_page"),
+               let pageIndex = ProcessInfo.processInfo.arguments.firstIndex(of: "-screenshot_page"),
+               ProcessInfo.processInfo.arguments.indices.contains(ProcessInfo.processInfo.arguments.index(after: pageIndex)),
+               ProcessInfo.processInfo.arguments[ProcessInfo.processInfo.arguments.index(after: pageIndex)] == "rules" {
+                showRules = true
+            }
         }
         .sheet(isPresented: $showRules) {
             RulesView()
                 .environmentObject(store)
-                .environmentObject(monetization)
-        }
-        .fullScreenCover(isPresented: $monetization.showAdBreak) {
-            AdBreakView {
-                monetization.finishAdBreak()
-            }
         }
         .alert(L10n.text("confirm_new_game_title"), isPresented: $showNewGameConfirm) {
             Button(L10n.text("confirm"), role: .destructive) {
@@ -55,16 +62,51 @@ struct GameView: View {
         } message: {
             Text(L10n.text("confirm_new_game_message"))
         }
-        .onChange(of: languageRawValue) { _, _ in
+        .onChange(of: languageRawValue) {
             store.refreshLocalizedHintForCurrentState()
-        }
-        .onChange(of: store.roundResults.count) { _, _ in
-            monetization.recordCompletedHand()
         }
     }
 
+    private func specialPlayEffectOverlay(_ effect: SpecialPlayEffect) -> some View {
+        let isChinese = AppLanguage(rawValue: languageRawValue) != .en
+        let title: String = {
+            switch effect.kind {
+            case .bomb:
+                return isChinese ? "炸弹" : "BOMB"
+            case .airplane:
+                return isChinese ? "飞机" : "AIRPLANE"
+            }
+        }()
+        let colors: [Color] = {
+            switch effect.kind {
+            case .bomb:
+                return [.yellow.opacity(0.95), .orange.opacity(0.9), .red.opacity(0.9)]
+            case .airplane:
+                return [.cyan.opacity(0.95), .blue.opacity(0.88), .purple.opacity(0.82)]
+            }
+        }()
+
+        return Text(title)
+            .font(.system(size: 46, weight: .black, design: .rounded))
+            .tracking(2)
+            .foregroundStyle(.white)
+            .padding(.horizontal, 28)
+            .padding(.vertical, 16)
+            .background(
+                ZStack {
+                    LinearGradient(colors: colors, startPoint: .topLeading, endPoint: .bottomTrailing)
+                    RadialGradient(colors: [.white.opacity(0.48), .clear], center: .topLeading, startRadius: 0, endRadius: 130)
+                }
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(.white.opacity(0.65), lineWidth: 2))
+            .shadow(color: colors.last?.opacity(0.5) ?? .orange.opacity(0.5), radius: 24, x: 0, y: 10)
+            .scaleEffect(1.04)
+            .allowsHitTesting(false)
+    }
+
     private var header: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 4) {
             HStack {
                 Button(action: {
                     withAnimation {
@@ -95,58 +137,47 @@ struct GameView: View {
                 }
                 .font(.caption)
                 .foregroundStyle(.white.opacity(0.9))
-            }
 
-            HStack(spacing: 8) {
-                Text(L10n.text("language"))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.9))
-                Picker("", selection: $languageRawValue) {
-                    ForEach(AppLanguage.allCases) { language in
-                        Text(language.displayName).tag(language.rawValue)
+                VStack(spacing: 4) {
+                    Menu {
+                        ForEach(AppLanguage.allCases) { language in
+                            Button {
+                                languageRawValue = language.rawValue
+                            } label: {
+                                HStack {
+                                    Text(language.displayName)
+                                    if languageRawValue == language.rawValue {
+                                        Image(systemName: "checkmark")
+                                    }
+                                }
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "globe")
+                            .font(.headline.weight(.semibold))
+                            .frame(width: 24, height: 22)
+                            .foregroundStyle(.white)
                     }
-                }
-                .pickerStyle(.segmented)
-                Button(store.isVoiceEnabled ? "语音开" : "语音关") {
-                    store.toggleVoiceEnabled()
-                }
-                .buttonStyle(SecondaryActionButtonStyle())
-                .frame(width: 88)
-            }
-            if !monetization.isPremium {
-                HStack {
-                    Text(L10n.format("ad_countdown_format", monetization.handsLeftUntilAd))
-                        .font(.caption2)
-                        .foregroundStyle(.white.opacity(0.8))
-                    Spacer()
-                    if monetization.purchaseInProgress {
-                        ProgressView()
-                            .tint(.white)
+                    .accessibilityLabel(L10n.text("language"))
+
+                    Button {
+                        store.toggleVoiceEnabled()
+                    } label: {
+                        Image(systemName: store.isVoiceEnabled ? "speaker.wave.2.fill" : "speaker.slash.fill")
+                            .font(.headline.weight(.semibold))
+                            .frame(width: 24, height: 22)
+                            .foregroundStyle(.white)
                     }
-                    Button(L10n.text("remove_ads_price")) {
-                        Task { await monetization.purchaseRemoveAds() }
-                    }
-                    .buttonStyle(SecondaryActionButtonStyle())
-                    .frame(width: 120)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                    
-                    Button(L10n.text("restore_purchase")) {
-                        Task { await monetization.restorePurchases() }
-                    }
-                    .buttonStyle(SecondaryActionButtonStyle())
-                    .frame(width: 90)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.8)
-                }
-                if let error = monetization.purchaseErrorMessage, !error.isEmpty {
-                    Text(error)
-                        .font(.caption2)
-                        .foregroundStyle(.yellow.opacity(0.95))
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    .buttonStyle(.plain)
+                    .accessibilityLabel(store.isVoiceEnabled ? L10n.text("voice_on") : L10n.text("voice_off"))
                 }
             }
         }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous).stroke(.white.opacity(0.16), lineWidth: 1))
+        .shadow(color: .black.opacity(0.12), radius: 8, x: 0, y: 5)
     }
 
     private var opponents: some View {
@@ -165,12 +196,23 @@ struct GameView: View {
         .foregroundStyle(.white)
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(10)
-        .background(active ? Color.blue.opacity(0.35) : Color.black.opacity(0.22))
+        .background(
+            LinearGradient(
+                colors: active
+                    ? [Color(red: 0.96, green: 0.54, blue: 0.18).opacity(0.55), Color(red: 0.7, green: 0.16, blue: 0.1).opacity(0.42)]
+                    : [Color.black.opacity(0.22), Color.black.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(active ? Color.blue.opacity(0.9) : Color.white.opacity(0.15), lineWidth: active ? 2 : 1)
+                .stroke(active ? Color.white.opacity(0.55) : Color.white.opacity(0.15), lineWidth: active ? 2 : 1)
         )
         .cornerRadius(10)
+        .shadow(color: active ? Color.orange.opacity(0.24) : .clear, radius: 10, x: 0, y: 5)
+        .scaleEffect(active ? 1.02 : 1)
+        .animation(.spring(response: 0.35, dampingFraction: 0.78), value: active)
     }
 
     private var tablePile: some View {
@@ -180,25 +222,29 @@ struct GameView: View {
                 .bold()
                 .foregroundStyle(.white)
             ScrollView(.horizontal, showsIndicators: false) {
-                HStack(spacing: -28) {
-                    ForEach(store.topCards) { card in
-                        cardView(card, selected: false)
+                if store.topCards.isEmpty {
+                    Text(L10n.text("table_waiting"))
+                        .font(.caption)
+                        .foregroundStyle(.white.opacity(0.62))
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.vertical, 22)
+                } else {
+                    HStack(spacing: -28) {
+                        ForEach(store.topCards) { card in
+                            cardView(card, selected: false)
+                                .transition(.scale(scale: 0.82).combined(with: .opacity))
+                        }
                     }
+                    .padding(.vertical, 4)
+                    .padding(.horizontal, 2)
                 }
-                .padding(.vertical, 4)
-                .padding(.horizontal, 2)
             }
             .frame(height: 80)
-            if let owner = store.topOwner {
-                Text(L10n.format("recent_play_format", store.name(owner)))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.8))
-            }
         }
         .padding(10)
-        .background(Color.black.opacity(0.18))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15), lineWidth: 1))
-        .cornerRadius(10)
+        .background(.black.opacity(0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(Color.white.opacity(0.15), lineWidth: 1))
+        .animation(.spring(response: 0.45, dampingFraction: 0.8), value: store.topCards.map(\.id))
     }
 
     private var myHand: some View {
@@ -216,14 +262,18 @@ struct GameView: View {
             GeometryReader { proxy in
                 let count = store.handCards.count
                 let cardWidth = handCardWidth
-                let step = handCardStep
+                let availableWidth = max(proxy.size.width, cardWidth)
+                let fittedStep = count > 1 ? (availableWidth - cardWidth) / CGFloat(count - 1) : handCardStep
+                let step = max(15, min(handCardStep, fittedStep))
 
                 ZStack(alignment: .topLeading) {
                     ForEach(Array(store.handCards.enumerated()), id: \.element.id) { index, card in
                         let isSelected = store.selected.contains(card.id)
                         cardView(card, selected: isSelected)
                             .offset(x: CGFloat(index) * step, y: isSelected ? -14 : 0)
+                            .rotationEffect(.degrees(isSelected ? -1.5 : 0), anchor: .bottom)
                             .zIndex(Double(index))
+                            .animation(.spring(response: 0.32, dampingFraction: 0.68), value: isSelected)
                             .onTapGesture {
                                 store.beginManualSelection()
                                 store.toggle(card)
@@ -232,7 +282,6 @@ struct GameView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                 .padding(.vertical, 16)
-                .padding(.horizontal, 2)
                 .contentShape(Rectangle())
                 .gesture(
                     DragGesture(minimumDistance: 0, coordinateSpace: .local)
@@ -247,10 +296,6 @@ struct GameView: View {
             }
             .frame(height: 100)
         }
-        .padding(10)
-        .background(Color.black.opacity(0.2))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.15), lineWidth: 1))
-        .cornerRadius(10)
     }
 
     private var actions: some View {
@@ -258,7 +303,7 @@ struct GameView: View {
             HStack(spacing: 8) {
                 Button(store.gameFinished ? L10n.text("next_hand") : L10n.text("play")) {
                     if store.gameFinished {
-                        store.newGame()
+                        store.startNextHand()
                     } else {
                         store.playSelected()
                     }
@@ -269,10 +314,20 @@ struct GameView: View {
                 .buttonStyle(SecondaryActionButtonStyle())
             }
             HStack(spacing: 8) {
-                Button(L10n.text("new_game")) { showNewGameConfirm = true }
+                Button(L10n.text("declare_single")) { store.declareSingle() }
                     .buttonStyle(SecondaryActionButtonStyle())
-                Button(L10n.text("rules")) { showRules = true }
-                    .buttonStyle(SecondaryActionButtonStyle())
+                    .disabled(!store.canDeclareSingle)
+                    .frame(maxWidth: .infinity)
+
+                HStack(spacing: 8) {
+                    Button(L10n.text("new_game")) { showNewGameConfirm = true }
+                        .buttonStyle(SecondaryActionButtonStyle())
+                        .frame(maxWidth: .infinity)
+                    Button(L10n.text("settings")) { showRules = true }
+                        .buttonStyle(SecondaryActionButtonStyle())
+                        .frame(maxWidth: .infinity)
+                }
+                .frame(maxWidth: .infinity)
             }
         }
     }
@@ -283,8 +338,8 @@ struct GameView: View {
             .foregroundStyle(.white.opacity(0.9))
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(10)
-            .background(Color.black.opacity(0.2))
-            .cornerRadius(10)
+            .background(.white.opacity(0.08), in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).stroke(.white.opacity(0.12), lineWidth: 1))
     }
 
     private var roundHistory: some View {
@@ -304,34 +359,23 @@ struct GameView: View {
                     headerCell(L10n.text("round_col_right"))
                 }
                 .padding(.bottom, 2)
-                ForEach(store.roundResults.suffix(5).reversed()) { item in
+                ForEach(store.roundResults.suffix(7).reversed()) { item in
                     HStack(spacing: 0) {
                         rowCell("\(item.handNo)")
-                        rowCell(scoreCellText(item.deltaMe))
-                        rowCell(scoreCellText(item.deltaLeft))
-                        rowCell(scoreCellText(item.deltaRight))
+                        rowCell(scoreCellText(item.deltaMe, bombedCount: bombedCount(for: .me, item: item)))
+                        rowCell(scoreCellText(item.deltaLeft, bombedCount: bombedCount(for: .left, item: item)))
+                        rowCell(scoreCellText(item.deltaRight, bombedCount: bombedCount(for: .right, item: item)))
                     }
                 }
             }
         }
         .padding(10)
-        .background(Color.black.opacity(0.2))
-        .cornerRadius(10)
+        .background(.black.opacity(store.roundResults.isEmpty ? 0 : 0.18), in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).stroke(.white.opacity(store.roundResults.isEmpty ? 0 : 0.12), lineWidth: 1))
     }
 
     private func cardView(_ card: Card, selected: Bool) -> some View {
-        VStack(alignment: .leading, spacing: 2) {
-            Text(card.rank.rawValue).font(.headline).bold()
-            Text(card.suit.symbol).font(.subheadline)
-            Spacer()
-        }
-        .foregroundStyle(card.isRed ? Color.red : Color.black)
-        .padding(6)
-        .frame(width: handCardWidth, height: 78, alignment: .topLeading)
-        .background(selected ? Color(red: 0.84, green: 0.89, blue: 1.0) : Color.white)
-        .overlay(RoundedRectangle(cornerRadius: 8).stroke(Color.gray.opacity(0.5), lineWidth: 1))
-        .cornerRadius(8)
-        .shadow(color: .black.opacity(0.2), radius: 3, x: 0, y: 2)
+        PlayingCardView(card: card, selected: selected, width: handCardWidth)
     }
 
     private func cardIndex(at point: CGPoint, count: Int, cardWidth: CGFloat, step: CGFloat) -> Int? {
@@ -389,70 +433,17 @@ struct GameView: View {
             .padding(.vertical, 2)
     }
 
-    private func scoreCellText(_ value: Int) -> String {
-        value >= 0 ? "+\(value)" : "\(value)"
+    private func scoreCellText(_ value: Int, bombedCount: Int = 0) -> String {
+        let base = value >= 0 ? "+\(value)" : "\(value)"
+        guard bombedCount > 0 else { return base }
+        return base + " 💣"
     }
-}
 
-struct PrimaryActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .foregroundStyle(.white)
-            .background(Color.blue.opacity(configuration.isPressed ? 0.7 : 0.9))
-            .cornerRadius(10)
-    }
-}
-
-struct SecondaryActionButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 10)
-            .foregroundStyle(.white)
-            .background(Color.black.opacity(configuration.isPressed ? 0.25 : 0.35))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Color.white.opacity(0.25), lineWidth: 1))
-            .cornerRadius(10)
-    }
-}
-
-struct AdBreakView: View {
-    @State private var secondsLeft = 3
-    let onClose: () -> Void
-
-    var body: some View {
-        ZStack {
-            Color.black.opacity(0.92).ignoresSafeArea()
-            VStack(spacing: 14) {
-                Text(L10n.text("ad_break_title"))
-                    .font(.title3.bold())
-                    .foregroundStyle(.white)
-                Text(L10n.text("ad_break_subtitle"))
-                    .font(.body)
-                    .foregroundStyle(.white.opacity(0.85))
-                Text(L10n.format("ad_break_wait_format", secondsLeft))
-                    .font(.caption)
-                    .foregroundStyle(.white.opacity(0.75))
-                Button(L10n.text("ad_break_close")) {
-                    onClose()
-                }
-                .buttonStyle(PrimaryActionButtonStyle())
-                .disabled(secondsLeft > 0)
-                .opacity(secondsLeft > 0 ? 0.5 : 1)
-                .frame(width: 180)
-            }
-            .padding(24)
-        }
-        .onAppear {
-            secondsLeft = 3
-            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { timer in
-                if secondsLeft <= 0 {
-                    timer.invalidate()
-                } else {
-                    secondsLeft -= 1
-                }
-            }
+    private func bombedCount(for player: PlayerID, item: RoundResult) -> Int {
+        switch player {
+        case .me: return item.bombedMe
+        case .left: return item.bombedLeft
+        case .right: return item.bombedRight
         }
     }
 }
