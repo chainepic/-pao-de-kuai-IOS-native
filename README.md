@@ -10,8 +10,27 @@
 
 <p align="center">
   <strong>一款基于 SwiftUI + 纯算法构建的现代湖南跑得快（16张）单机纸牌游戏。</strong><br>
-  包含完整的地道规则引擎、启发式 AI 决策系统、离线语音播报、多语言支持以及百万级对局自博弈（Self-Play）评测框架。
+  包含地道的规则引擎、启发式 AI 决策系统、离线语音播报、中英双语支持以及百万级对局自博弈（Self-Play）评测框架。
 </p>
+
+---
+
+## 📱 界面预览 (Screenshots)
+
+<table align="center">
+  <tr>
+    <td align="center" width="25%"><strong>🇨🇳 中文欢迎页</strong></td>
+    <td align="center" width="25%"><strong>🇨🇳 中文牌桌</strong></td>
+    <td align="center" width="25%"><strong>🇺🇸 English Welcome</strong></td>
+    <td align="center" width="25%"><strong>🇺🇸 English Gameplay</strong></td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/welcome-zh.png" width="100%" alt="中文欢迎页" /></td>
+    <td><img src="docs/screenshots/game-zh.png" width="100%" alt="中文牌桌" /></td>
+    <td><img src="docs/screenshots/welcome-en.png" width="100%" alt="English Welcome" /></td>
+    <td><img src="docs/screenshots/game-en.png" width="100%" alt="English Gameplay" /></td>
+  </tr>
+</table>
 
 ---
 
@@ -86,8 +105,8 @@ PaodekuaiNative/
 
 1. 克隆代码仓库：
    ```bash
-   git clone https://github.com/your-username/paodekuai-native.git
-   cd paodekuai-native
+   git clone https://github.com/chainepic/-pao-de-kuai-IOS-native.git
+   cd -pao-de-kuai-IOS-native
    ```
 
 2. 打开项目：
